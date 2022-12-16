@@ -1,0 +1,5 @@
+photoshop/
+unused/
+node_modules/
+__pycache__/
+sslcert/

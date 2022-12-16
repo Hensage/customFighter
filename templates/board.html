@@ -1,0 +1,165 @@
+<html>
+    <head>
+    </head>
+    <style>
+
+    </style>
+    <body id="Body">
+        <canvas id="game" width="1200" height="600" style="border:1px solid #000000;"></canvas>
+    </body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js" integrity="sha512-q/dWJ3kcmjBLU4Qc47E4A9kTB4m3wuTY7vkFJDTZKjTs8jhyGQnaUrxa0Ytd0ssMZhbNua9hE+E7Qv1j+DyZwA==" crossorigin="anonymous"></script>
+    <script>
+        var directions= [false,false,false,false];
+        var buttons = [false,false,false,false];
+        function token() {
+	        return (Math.random().toString(36).substr(2)+Math.random().toString(36).substr(2));
+        };
+        var token2 = token()
+        var socket = io({
+            auth: {
+                token: token2
+            }
+        });
+        socket.on('connect', function() {
+            socket.emit('message', {data: 'I\'m connected!'});
+        });
+
+        const canvas = document.getElementById("game");
+        const ctx = canvas.getContext("2d");
+
+        const pSize = [50,50];
+
+        document.body.addEventListener('keydown',(event)=>{
+            switch (event.key){
+                case "a":
+                    directions[0]=true;
+                    break;
+                case "w":
+                    directions[1]=true;
+                    break;
+                case "d":
+                    directions[2]=true;
+                    break;
+                case "s":
+                    directions[3]=true;
+                    break;
+
+                case "u":
+                    buttons[0]=true;
+                    break;
+                case "i":
+                    buttons[1]=true;
+                    break;
+                case "o":
+                    buttons[2]=true;
+                    break;
+                case "p":
+                    buttons[3]=true;
+                    break;
+            }
+            socket.emit('buttonPress',directions,buttons);
+        });
+        document.body.addEventListener('keyup',(event)=>{
+            switch (event.key){
+                case "a":
+                    directions[0]=false;
+                    break;
+                case "w":
+                    directions[1]=false;
+                    break;
+                case "d":
+                    directions[2]=false;
+                    break;
+                case "s":
+                    directions[3]=false;
+                    break;
+
+                case "u":
+                    buttons[0]=false;
+                    break;
+                case "i":
+                    buttons[1]=false;
+                    break;
+                case "o":
+                    buttons[2]=false;
+                    break;
+                case "p":
+                    buttons[3]=false;
+                    break;
+            }
+            socket.emit('buttonPress',directions,buttons);
+        });
+        socket.on('update', (plays,hitBox,stage)=> {
+            clear();
+            for (let i = 0;i<stage.length;i++){
+                drawRect(stage[i][0],stage[i][1],stage[i][2]-stage[i][0],stage[i][3]-stage[i][1],"#635034");
+            }
+            for (let i = 0;i<plays.length;i++){
+                //drawRect(plays[i][0]-(pSize[0]/2),plays[i][1]-(pSize[1]/2),pSize[0],pSize[1],"green");
+                drawChar(plays[i][0][0],plays[i][0][1],plays[i][1],plays[i][3],pSize);
+                ctx.font = "24px serif";
+                ctx.fillText(("Player "+i+" dmg= "+Math.floor(100*plays[i][2])+"%"), 10+(i*800), 50);
+            }
+            for (let i = 0;i<hitBox.length;i++){
+                console.log(hitBox[i])
+                let tx = hitBox[i].position[0];
+                let ty = hitBox[i].position[1];
+                if (hitBox[i].attached){
+                    tx = hitBox[i].player.position[0]+hitBox[i].position[0];
+                    ty = hitBox[i].player.position[1]+hitBox[i].position[1];
+                }
+                drawCircle(tx,ty,hitBox[i].size,"red",0.2);
+            }
+            
+
+            //console.log(stage);
+        });
+        
+        function drawRect(x1,y1,width,height,fill){
+            ctx.fillStyle = fill;
+            ctx.fillRect(x1, y1, width, height);
+        }
+        function drawCircle(x,y,r,fill,trans){
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, 2 * Math.PI, false);
+            ctx.globalAlpha = trans;
+            ctx.fillStyle = fill;
+            
+            ctx.fill();
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
+        function drawChar(x,y,facing,velo,size){
+            
+            let tangle = Math.atan2(velo[1],velo[0])+180;
+            for (let angle =0;angle<=Math.PI*2;angle+=Math.PI/20){
+                for (let count =1;count<4;count++){
+                    let diff = (Math.abs((Math.abs(tangle-angle)%(Math.PI))-(Math.PI/2)));
+                    let tx = x + (((count*((size[0]/5))))*Math.sin(angle)*(1+(diff*Math.abs(velo[0])/50)));
+                    let ty = y + (((count*((size[1]/5))))*Math.cos(angle)*(1+diff*Math.abs(velo[1])/50));
+                    drawCircle(tx,ty,size[0]/5,"black",1);
+                    //console.log(tx+", "+ty)
+                }
+            }
+            ctx.fillStyle = "green";
+            /*
+            ctx.beginPath();
+            ctx.moveTo(x-(facing*size[0]/2), y-(size[1]/2));
+            ctx.lineTo(x-(facing*size[0]*0.2),y-(size[1]/2));
+            ctx.lineTo(x+(facing*size[0]/2),y-(size[1]*0.2));
+            ctx.lineTo(x+(facing*size[0]*0.2),y-(size[1]*0.2));
+            ctx.lineTo(x+(facing*size[0]*0.2),y[1]);
+            ctx.lineTo(x+(facing*size[0]/2), y+(size[1]/2));
+            ctx.lineTo(x-(facing*size[0]/2), y+(size[1]/2));
+            ctx.closePath();
+            ctx.stroke();
+            ctx.fill();
+            */
+        }
+        function clear(){
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+    </script>
+
+</html>
