@@ -44,10 +44,13 @@ module.exports = class match{
 			for (let z =this.players[i].hitboxes.length-1;z>=0;z--){
 				let temp = this.players[i].hitboxes[z];
 				temp["player"] = {"num":i,"position":this.players[i].position};
-				if (this.players[1-i].isHit(temp)){
-					temp['hit']=true;
+				for (let target=0;target<this.players.length;target++){
+					if (target!=i){
+						if (this.players[target].isHit(temp,this.players[i].attacks[temp.moveToken])){
+							temp['hit']=true;
+						}
+					}
 				}
-				
 				boxes.push(temp);
 			}
 		}

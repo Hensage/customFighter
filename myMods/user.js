@@ -6,7 +6,12 @@ const airFrict = 0.9;
 const airUpFrict = 0.9;
 const gravity = 2;
 const minSpeed = 0.5;
-const jumpVel = 30;
+const jumpVel = 60;
+
+var attObj = require("./attack/attack");
+var pokeAtt = require("./attack/poke");
+var swingAtt = require("./attack/swing");
+var projAtt = require("./attack/proj");
 module.exports = class user{
 	constructor(sock){
 		this.sock =sock; //Players socket id
@@ -21,8 +26,18 @@ module.exports = class user{
 		this.aniInterupt = true;
 		this.animFrame = 0;
 
-		this.percentage = 1;
+		this.percentage = 0;
 		this.hitCool = 0;
+		this.lastHit = null;
+
+		this.attacks=  [new pokeAtt(this,0,90,[1,-1],10,10,100,10,14,50,45,20,true),
+						new pokeAtt(this,1,45,[1,3],4,5,50,8,7,20,10,6,true),
+						new pokeAtt(this,2,90,[1,-1],4,5,40,40,6,20,80,6,false),
+						new pokeAtt(this,3,0,[1,3],10,10,50,10,14,20,170,20,false),
+						new swingAtt(this,0,90,[1,2],20,10,180,100,10,14,50,45,20,true),
+						new swingAtt(this,0,-45,[1,2],10,10,90,100,10,14,50,45,20,false),
+						new projAtt(this,0,135,[2,-1],10,100,20,10,14,50,45,20,true)];
+		this.currAtt = -1;
 
 		this.facing=-1;
 		this.attackStun = 0;
@@ -69,7 +84,7 @@ module.exports = class user{
 				}else{
 					this.velocity[0] -= airAccel
 				}
-				if (this.attackStun==0){
+				if (this.attackStun==0 && this.grounded){
 					this.facing=-1;
 				}
 			}
@@ -80,7 +95,7 @@ module.exports = class user{
 				else{
 					this.velocity[0] += airAccel
 				}
-				if (this.attackStun==0){
+				if (this.attackStun==0  && this.grounded){
 					this.facing=1;
 				}
 			}
@@ -133,10 +148,26 @@ module.exports = class user{
 		if (this.buttons[0] && this.grounded && this.attackStun==0){
 			this.velocity[1] -= jumpVel;
 		}
-		if (this.attackStun!=0){this.attackStun--;this.stuck=false};
+		if (this.attackStun!=0){this.attackStun--;};
 		if (this.hitCool!=0){this.hitCool--;};
 		if (this.stuck){this.velocity[0] = 0;};
 
+		for (let i =0;i<this.attacks.length;i++){
+			if (this.attacks[i].activate()){
+				this.currAtt = i;
+				break;
+			}
+		}
+		this.hitboxes=[];
+		for (let i=0;i<this.attacks.length;i++){
+			if (this.attacks[i].activ){
+				let boxs = this.attacks[i].getCurrBox();
+				for (let i=0;i<boxs.length;i++){
+					this.hitboxes.push(boxs[i]);
+				}
+			}
+		}
+		/*
 		if (this.animFrame>0){
 			this.animFrame++;
 			if (this.animation == "attack1"){
@@ -147,6 +178,9 @@ module.exports = class user{
 			else if (this.animation == "attack3"){
 				this.attack3();
 			}
+			else if (this.animation == "attack4"){
+				this.attack4();
+			}
 		}
 
 
@@ -156,9 +190,12 @@ module.exports = class user{
 			}else{
 				this.attack1();
 			}
-			this.attack3();
-			
+			this.attack3();	
 		}
+		if (this.buttons[2]){
+			this.attack4();
+		}
+		*/
 	}
 	updateBoxes(){
 		for (let i =this.hitboxes.length-1;i>=0;i--){
@@ -168,29 +205,28 @@ module.exports = class user{
 			}
 		}
 	}
-	isHit(hitbox){
+	isHit(hitbox,attack){
 		let tx = hitbox.position[0];
         let ty = hitbox.position[1];
-		
-        if (hitbox.attached){
-            tx = hitbox.player.position[0]+hitbox.position[0];
-            ty = hitbox.player.position[1]+hitbox.position[1];
-        }
 		//console.log("__X____")
 		//console.log((this.position[0]+(this.size[0]/2))+"greater than "+(tx-hitbox.size)+".");
 		//console.log((this.position[0]-(this.size[0]/2))+"less than "+(tx+hitbox.size)+".");
 		//console.log("__Y____")
 		//console.log((this.position[1]+(this.size[1]/2))+"greater than "+(ty-hitbox.size)+".");
 		//console.log((this.position[1]-(this.size[1]/2))+"less than "+(ty+hitbox.size)+".");
-		if (hitbox.hit!=true && this.hitCool==0){
+		if (this.hitCool==0 && (attack.moveToken != this.lastHit) && hitbox.active==0){
 			if (this.position[0]+(this.size[0]/2)>(tx-hitbox.size)&&this.position[0]-(this.size[0]/2)<(tx+hitbox.size)){
 				if (this.position[1]+(this.size[1]/2)>(ty-hitbox.size)&&this.position[1]-(this.size[1]/2)<(ty+hitbox.size)){
 					console.log("HIT");
-					this.percentage *= (1+(hitbox.strength/1000));
+					this.lastHit = attack.moveToken;
+					this.percentage += attack.damage;
 					this.hitCool=5;
-					this.attackStun=20;
-					this.velocity[0]=((hitbox.strength*Math.sin(hitbox.direction*(Math.PI*2)/360)*this.percentage)+this.velocity[0])/2;
-					this.velocity[1]=((-hitbox.strength*Math.cos(hitbox.direction*(Math.PI*2)/360)*this.percentage)+this.velocity[1])/2;
+					this.attackStun=attack.stun;
+					this.velocity[0]=((attack.strength*Math.sin(attack.launchAngle*(Math.PI*2)/360)*(1+((this.percentage**1.2)/100))*attack.actFace)+this.velocity[0])/2;
+					this.velocity[1]=((-attack.strength*Math.cos(attack.launchAngle*(Math.PI*2)/360)*(1+((this.percentage**1.2)/100)))+this.velocity[1])/2;
+					if (attack.launchAngle>90 && this.grounded){
+						this.velocity[1]=((attack.strength*Math.cos(attack.launchAngle*(Math.PI*2)/360)*(1+((this.percentage**1.2)/100)))+this.velocity[1])/2;
+					}
 					return true;
 				}
 			}
@@ -200,6 +236,7 @@ module.exports = class user{
 	attack1(){
 		if (this.aniInterupt && this.grounded &&  this.attackStun==0 && this.animFrame == 0){
 			this.animation = "attack1";
+			this.moveToken = token();
 			this.aniInterupt = false;
 			this.stuck = true;
 			this.attackStun=20;
@@ -207,29 +244,29 @@ module.exports = class user{
 		}
 		if (this.animation == "attack1"){
 			if (this.animFrame == 5){
-				this.hitboxes.push({"position":[0,-50],"attached":true,"size":10,"duration":4,"strength":46,"direction":45*this.facing});
-				this.hitboxes.push({"position":[0,-30],"attached":true,"size":10,"duration":4,"strength":34,"direction":45*this.facing});
-				this.hitboxes.push({"position":[0,-20],"attached":true,"size":10,"duration":4,"strength":22,"direction":45*this.facing});
+				this.hitboxes.push({"position":[0,-50],"attached":true,"size":10,"duration":4,"strength":46,"direction":45*this.facing,"moveToken":this.moveToken});
+				this.hitboxes.push({"position":[0,-30],"attached":true,"size":10,"duration":4,"strength":34,"direction":45*this.facing,"moveToken":this.moveToken});
+				this.hitboxes.push({"position":[0,-20],"attached":true,"size":10,"duration":4,"strength":22,"direction":45*this.facing,"moveToken":this.moveToken});
 			}
 			else if (this.animFrame == 7){
-				this.hitboxes.push({"position":[12*this.facing,-49],"attached":true,"size":10,"duration":4,"strength":46,"direction":45*this.facing});
-				this.hitboxes.push({"position":[8*this.facing,-29],"attached":true,"size":10,"duration":4,"strength":34,"direction":45*this.facing});
-				this.hitboxes.push({"position":[4*this.facing,-19],"attached":true,"size":10,"duration":4,"strength":22,"direction":45*this.facing});
+				this.hitboxes.push({"position":[12*this.facing,-49],"attached":true,"size":10,"duration":4,"strength":46,"direction":45*this.facing,"moveToken":this.moveToken});
+				this.hitboxes.push({"position":[8*this.facing,-29],"attached":true,"size":10,"duration":4,"strength":34,"direction":45*this.facing,"moveToken":this.moveToken});
+				this.hitboxes.push({"position":[4*this.facing,-19],"attached":true,"size":10,"duration":4,"strength":22,"direction":45*this.facing,"moveToken":this.moveToken});
 			}
 			else if (this.animFrame == 9){
-				this.hitboxes.push({"position":[30*this.facing,-40],"attached":true,"size":10,"duration":4,"strength":46,"direction":45*this.facing});
-				this.hitboxes.push({"position":[24*this.facing,-25],"attached":true,"size":10,"duration":4,"strength":34,"direction":45*this.facing});
-				this.hitboxes.push({"position":[12*this.facing,-15],"attached":true,"size":10,"duration":4,"strength":22,"direction":45*this.facing});
+				this.hitboxes.push({"position":[30*this.facing,-40],"attached":true,"size":10,"duration":4,"strength":46,"direction":45*this.facing,"moveToken":this.moveToken});
+				this.hitboxes.push({"position":[24*this.facing,-25],"attached":true,"size":10,"duration":4,"strength":34,"direction":45*this.facing,"moveToken":this.moveToken});
+				this.hitboxes.push({"position":[12*this.facing,-15],"attached":true,"size":10,"duration":4,"strength":22,"direction":45*this.facing,"moveToken":this.moveToken});
 			}
 			else if (this.animFrame == 11){
-				this.hitboxes.push({"position":[40*this.facing,-30],"attached":true,"size":10,"duration":4,"strength":46,"direction":45*this.facing});
-				this.hitboxes.push({"position":[36*this.facing,-20],"attached":true,"size":10,"duration":4,"strength":34,"direction":45*this.facing});
-				this.hitboxes.push({"position":[16*this.facing,-15],"attached":true,"size":10,"duration":4,"strength":22,"direction":45*this.facing});
+				this.hitboxes.push({"position":[40*this.facing,-30],"attached":true,"size":10,"duration":4,"strength":46,"direction":45*this.facing,"moveToken":this.moveToken});
+				this.hitboxes.push({"position":[36*this.facing,-20],"attached":true,"size":10,"duration":4,"strength":34,"direction":45*this.facing,"moveToken":this.moveToken});
+				this.hitboxes.push({"position":[16*this.facing,-15],"attached":true,"size":10,"duration":4,"strength":22,"direction":45*this.facing,"moveToken":this.moveToken});
 			}
 			else if (this.animFrame == 13){
-				this.hitboxes.push({"position":[60*this.facing,-5],"attached":true,"size":10,"duration":4,"strength":46,"direction":45*this.facing});
-				this.hitboxes.push({"position":[40*this.facing,-5],"attached":true,"size":10,"duration":4,"strength":34,"direction":45*this.facing});
-				this.hitboxes.push({"position":[20*this.facing,-5],"attached":true,"size":10,"duration":4,"strength":22,"direction":45*this.facing});
+				this.hitboxes.push({"position":[60*this.facing,-5],"attached":true,"size":10,"duration":4,"strength":46,"direction":45*this.facing,"moveToken":this.moveToken});
+				this.hitboxes.push({"position":[40*this.facing,-5],"attached":true,"size":10,"duration":4,"strength":34,"direction":45*this.facing,"moveToken":this.moveToken});
+				this.hitboxes.push({"position":[20*this.facing,-5],"attached":true,"size":10,"duration":4,"strength":22,"direction":45*this.facing,"moveToken":this.moveToken});
 			}
 			else if (this.animFrame == 20){
 				console.log("RESET")
@@ -243,22 +280,23 @@ module.exports = class user{
 		if (this.aniInterupt && this.grounded &&  this.attackStun==0 && this.animFrame == 0){
 			this.animation = "attack2";
 			this.aniInterupt = false;
+			this.moveToken = token();
 			this.stuck = true;
 			this.attackStun=10;
 			this.animFrame = 1;
 		}
 		if (this.animation == "attack2"){
 			if (this.animFrame == 2){
-				this.hitboxes.push({"position":[0,(this.size[1]/2)-10],"attached":true,"size":10,"duration":6,"strength":23,"direction":15*this.facing});
+				this.hitboxes.push({"position":[0,(this.size[1]/2)-10],"attached":true,"size":10,"duration":6,"strength":23,"direction":15*this.facing,"moveToken":this.moveToken});
 			}
 			else if (this.animFrame == 3){
-				this.hitboxes.push({"position":[20*this.facing,(this.size[1]/2)-10],"attached":true,"size":10,"duration":4,"strength":23,"direction":15*this.facing});
+				this.hitboxes.push({"position":[20*this.facing,(this.size[1]/2)-10],"attached":true,"size":10,"duration":4,"strength":23,"direction":15*this.facing,"moveToken":this.moveToken});
 			}
 			else if (this.animFrame == 5){
-				this.hitboxes.push({"position":[40*this.facing,(this.size[1]/2)-10],"attached":true,"size":10,"duration":2,"strength":23,"direction":15*this.facing});
+				this.hitboxes.push({"position":[40*this.facing,(this.size[1]/2)-10],"attached":true,"size":10,"duration":2,"strength":23,"direction":15*this.facing,"moveToken":this.moveToken});
 			}
 			else if (this.animFrame == 7){
-				this.hitboxes.push({"position":[60*this.facing,(this.size[1]/2)-10],"attached":true,"size":10,"duration":2,"strength":23,"direction":15*this.facing});
+				this.hitboxes.push({"position":[60*this.facing,(this.size[1]/2)-10],"attached":true,"size":10,"duration":2,"strength":23,"direction":15*this.facing,"moveToken":this.moveToken});
 			}
 			else if (this.animFrame == 10){
 				console.log("RESET")
@@ -272,22 +310,54 @@ module.exports = class user{
 		if (this.aniInterupt && !this.grounded &&  this.attackStun==0 && this.animFrame == 0){
 			this.animation = "attack3";
 			this.aniInterupt = false;
+			this.moveToken = token();
 			this.stuck = false;
 			this.attackStun=15;
 			this.animFrame = 1;
 		}
 		if (this.animation == "attack3"){
 			if (this.animFrame == 2){
-				this.hitboxes.push({"position":[10*this.facing,0],"attached":true,"size":10,"duration":4,"strength":22,"direction":80*this.facing});
+				this.hitboxes.push({"position":[10*this.facing,0],"attached":true,"size":10,"duration":4,"strength":22,"direction":80*this.facing,"moveToken":this.moveToken,"multi":true});
 			}
 			else if (this.animFrame == 4){
-				this.hitboxes.push({"position":[20*this.facing,0],"attached":true,"size":10,"duration":4,"strength":23,"direction":80*this.facing});
+				this.hitboxes.push({"position":[20*this.facing,0],"attached":true,"size":10,"duration":4,"strength":23,"direction":80*this.facing,"moveToken":this.moveToken,"multi":true});
 			}
 			else if (this.animFrame == 8){
-				this.hitboxes.push({"position":[-10*this.facing,0],"attached":true,"size":10,"duration":4,"strength":22,"direction":-80*this.facing});
+				this.hitboxes.push({"position":[-10*this.facing,0],"attached":true,"size":10,"duration":4,"strength":22,"direction":-80*this.facing,"moveToken":this.moveToken,"multi":true});
 			}
 			else if (this.animFrame == 10){
-				this.hitboxes.push({"position":[-20*this.facing,0],"attached":true,"size":10,"duration":4,"strength":23,"direction":-80*this.facing});
+				this.hitboxes.push({"position":[-20*this.facing,0],"attached":true,"size":10,"duration":4,"strength":23,"direction":-80*this.facing,"moveToken":this.moveToken,"multi":true});
+			}
+			else if (this.animFrame == 15){
+				console.log("RESET")
+				this.animation="";
+				this.stuck = false;
+				this.aniInterupt=true;
+				this.animFrame=0;
+			}
+		}
+	}
+	attack4(){
+		if (this.aniInterupt && !this.grounded &&  this.attackStun==0 && this.animFrame == 0){
+			this.animation = "attack4";
+			this.aniInterupt = false;
+			this.moveToken = token();
+			this.stuck = false;
+			this.attackStun=15;
+			this.animFrame = 1;
+		}
+		if (this.animation == "attack3"){
+			if (this.animFrame == 2){
+				this.hitboxes.push({"position":[10*this.facing,0],"attached":false,"size":10,"duration":4,"strength":22,"direction":80*this.facing,"moveToken":this.moveToken,"multi":true});
+			}
+			else if (this.animFrame == 4){
+				this.hitboxes.push({"position":[20*this.facing,0],"attached":true,"size":10,"duration":4,"strength":23,"direction":80*this.facing,"moveToken":this.moveToken,"multi":true});
+			}
+			else if (this.animFrame == 8){
+				this.hitboxes.push({"position":[-10*this.facing,0],"attached":true,"size":10,"duration":4,"strength":22,"direction":-80*this.facing,"moveToken":this.moveToken,"multi":true});
+			}
+			else if (this.animFrame == 10){
+				this.hitboxes.push({"position":[-20*this.facing,0],"attached":true,"size":10,"duration":4,"strength":23,"direction":-80*this.facing,"moveToken":this.moveToken,"multi":true});
 			}
 			else if (this.animFrame == 15){
 				console.log("RESET")
@@ -299,7 +369,7 @@ module.exports = class user{
 		}
 	}
 	move(stage){
-		this.updateBoxes();
+		//this.updateBoxes();
 		this.velocityCal();
 		this.action();
 		this.checkGrounded(stage);
@@ -313,3 +383,6 @@ module.exports = class user{
 		}
 	}
 }
+var token = function() {
+	return (Math.random().toString(36).substr(2)+Math.random().toString(36).substr(2));
+};
